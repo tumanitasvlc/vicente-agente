@@ -1,0 +1,26 @@
+# Configuración del negocio — Generado por AgentKit
+negocio:
+  nombre: "Tu Manitas VLC"
+  descripcion: >
+    Servicio de manitas y pequeñas reparaciones del hogar en Valencia.
+    Especialistas en instalación y reparación de muebles, montaje de IKEA,
+    colgar cuadros y televisores, reparaciones eléctricas básicas, fontanería
+    menor, pintura y pequeños arreglos. Clientes particulares en Valencia
+    capital y área metropolitana (Paterna, Burjassot, Mislata, Torrent,
+    Sedaví, Xirivella, Alboraya).
+  horario: "Lunes a Viernes 8:00 a 20:00 / Sábados 9:00 a 14:00 solo urgencias"
+  zona: "Valencia capital y área metropolitana"
+  formas_pago: "Transferencia, Bizum o efectivo al finalizar el trabajo"
+  garantia: "30 días en mano de obra"
+
+agente:
+  nombre: "Vicente"
+  tono: "amigable y casual"
+  casos_de_uso:
+    - "Responder preguntas frecuentes sobre servicios y precios"
+    - "Calificar y atender leads / ventas"
+    - "Recoger solicitudes de presupuesto (trabajo, zona, teléfono de contacto)"
+
+metadata:
+  creado: "2026-05-09"
+  version: "1.0"

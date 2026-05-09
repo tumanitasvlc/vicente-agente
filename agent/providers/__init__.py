@@ -1,22 +1,8 @@
-# agent/providers/__init__.py — Factory de proveedores
-# Generado por AgentKit
+# agent/providers/__init__.py — Proveedores de WhatsApp (Meta + Twilio en paralelo)
 
-import os
-from agent.providers.base import ProveedorWhatsApp
+from agent.providers.meta import ProveedorMeta
+from agent.providers.twilio import ProveedorTwilio
 
-
-def obtener_proveedor() -> ProveedorWhatsApp:
-    """Retorna el proveedor de WhatsApp configurado en .env."""
-    proveedor = os.getenv("WHATSAPP_PROVIDER", "").lower()
-
-    if not proveedor:
-        raise ValueError("WHATSAPP_PROVIDER no configurado en .env. Usa: meta o twilio")
-
-    if proveedor == "twilio":
-        from agent.providers.twilio import ProveedorTwilio
-        return ProveedorTwilio()
-    elif proveedor == "meta":
-        from agent.providers.meta import ProveedorMeta
-        return ProveedorMeta()
-    else:
-        raise ValueError(f"Proveedor no soportado: {proveedor}. Usa: meta o twilio")
+# Instancias únicas reutilizables
+proveedor_meta = ProveedorMeta()
+proveedor_twilio = ProveedorTwilio()

@@ -1,5 +1,4 @@
-# agent/main.py — Servidor FastAPI + Webhook de WhatsApp
-# Generado por AgentKit
+# agent/main.py — Servidor FastAPI + Webhook de WhatsApp (Meta + Twilio)
 
 import os
 import logging
@@ -10,7 +9,7 @@ from dotenv import load_dotenv
 
 from agent.brain import generar_respuesta
 from agent.memory import inicializar_db, guardar_mensaje, obtener_historial
-from agent.providers import obtener_proveedor
+from agent.providers import proveedor_meta, proveedor_twilio
 
 load_dotenv()
 
@@ -19,8 +18,19 @@ log_level = logging.DEBUG if ENVIRONMENT == "development" else logging.INFO
 logging.basicConfig(level=log_level)
 logger = logging.getLogger("agentkit")
 
-proveedor = obtener_proveedor()
 PORT = int(os.getenv("PORT", 8000))
+
+
+def _detectar_proveedor(request: Request):
+    """
+    Detecta el origen del webhook por Content-Type:
+    - application/json              → Meta Cloud API
+    - application/x-www-form-urlencoded → Twilio
+    """
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        return proveedor_meta
+    return proveedor_twilio
 
 
 @asynccontextmanager
@@ -29,7 +39,7 @@ async def lifespan(app: FastAPI):
     await inicializar_db()
     logger.info("Base de datos inicializada")
     logger.info(f"Servidor AgentKit corriendo en puerto {PORT}")
-    logger.info(f"Proveedor de WhatsApp: {proveedor.__class__.__name__}")
+    logger.info("Proveedores activos: Meta Cloud API + Twilio")
     yield
 
 
@@ -48,8 +58,11 @@ async def health_check():
 
 @app.get("/webhook")
 async def webhook_verificacion(request: Request):
-    """Verificación GET del webhook (requerido por Meta Cloud API, no-op para Twilio)."""
-    resultado = await proveedor.validar_webhook(request)
+    """
+    Verificación GET requerida por Meta Cloud API.
+    Comprueba hub.verify_token y devuelve hub.challenge en texto plano.
+    """
+    resultado = await proveedor_meta.validar_webhook(request)
     if resultado is not None:
         return PlainTextResponse(str(resultado))
     return {"status": "ok"}
@@ -58,9 +71,12 @@ async def webhook_verificacion(request: Request):
 @app.post("/webhook")
 async def webhook_handler(request: Request):
     """
-    Recibe mensajes de WhatsApp via Twilio.
-    Procesa el mensaje, genera respuesta con Claude y la envía de vuelta.
+    Recibe mensajes de WhatsApp desde Meta o Twilio.
+    Detecta el origen por Content-Type y usa el proveedor correspondiente
+    tanto para parsear el payload como para enviar la respuesta.
     """
+    proveedor = _detectar_proveedor(request)
+    origen = proveedor.__class__.__name__
     try:
         mensajes = await proveedor.parsear_webhook(request)
 
@@ -68,11 +84,9 @@ async def webhook_handler(request: Request):
             if msg.es_propio or not msg.texto:
                 continue
 
-            logger.info(f"Mensaje de {msg.telefono}: {msg.texto}")
+            logger.info(f"[{origen}] Mensaje de {msg.telefono}: {msg.texto}")
 
-            # Obtener historial ANTES de guardar (brain.py agrega el mensaje actual)
             historial = await obtener_historial(msg.telefono)
-
             respuesta = await generar_respuesta(msg.texto, historial)
 
             await guardar_mensaje(msg.telefono, "user", msg.texto)
@@ -80,10 +94,10 @@ async def webhook_handler(request: Request):
 
             await proveedor.enviar_mensaje(msg.telefono, respuesta)
 
-            logger.info(f"Respuesta a {msg.telefono}: {respuesta}")
+            logger.info(f"[{origen}] Respuesta a {msg.telefono}: {respuesta}")
 
         return {"status": "ok"}
 
     except Exception as e:
-        logger.error(f"Error en webhook: {e}")
+        logger.error(f"[{origen}] Error en webhook: {e}")
         raise HTTPException(status_code=500, detail=str(e))

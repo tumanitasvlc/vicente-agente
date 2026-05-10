@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import String, Text, DateTime, select, Integer
+from sqlalchemy import String, Text, DateTime, select, Integer, func
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,6 +31,16 @@ class Mensaje(Base):
     telefono: Mapped[str] = mapped_column(String(50), index=True)
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Lead(Base):
+    """Lead detectado — cliente que compartió su teléfono en el chat."""
+    __tablename__ = "leads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    telefono_cliente: Mapped[str] = mapped_column(String(50), index=True)
+    mensaje: Mapped[str] = mapped_column(Text)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -78,6 +88,36 @@ async def obtener_historial(telefono: str, limite: int = 20) -> list[dict]:
             {"role": msg.role, "content": msg.content}
             for msg in mensajes
         ]
+
+
+async def guardar_lead(telefono_cliente: str, mensaje: str):
+    """Registra un lead detectado en la base de datos."""
+    async with async_session() as session:
+        lead = Lead(
+            telefono_cliente=telefono_cliente,
+            mensaje=mensaje,
+            timestamp=datetime.utcnow(),
+        )
+        session.add(lead)
+        await session.commit()
+
+
+async def stats_hoy() -> dict:
+    """Devuelve el número de conversaciones únicas y leads del día (UTC)."""
+    hoy = str(datetime.utcnow().date())
+    async with async_session() as session:
+        conv_q = (
+            select(func.count(func.distinct(Mensaje.telefono)))
+            .where(func.date(Mensaje.timestamp) == hoy)
+            .where(Mensaje.role == "user")
+        )
+        lead_q = (
+            select(func.count(Lead.id))
+            .where(func.date(Lead.timestamp) == hoy)
+        )
+        conversaciones = (await session.execute(conv_q)).scalar() or 0
+        leads = (await session.execute(lead_q)).scalar() or 0
+    return {"conversaciones": conversaciones, "leads": leads}
 
 
 async def limpiar_historial(telefono: str):

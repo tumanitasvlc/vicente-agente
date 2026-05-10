@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from agent.brain import generar_respuesta
 from agent.memory import inicializar_db, guardar_mensaje, obtener_historial
 from agent.providers import proveedor_meta, proveedor_twilio
+from agent.leads import procesar_posible_lead
+from agent.scheduler import crear_scheduler
 
 load_dotenv()
 
@@ -35,12 +37,16 @@ def _detectar_proveedor(request: Request):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Inicializa la base de datos al arrancar el servidor."""
+    """Inicializa la base de datos y el scheduler al arrancar el servidor."""
     await inicializar_db()
+    scheduler = crear_scheduler()
+    scheduler.start()
     logger.info("Base de datos inicializada")
     logger.info(f"Servidor AgentKit corriendo en puerto {PORT}")
     logger.info("Proveedores activos: Meta Cloud API + Twilio")
+    logger.info("Scheduler activo: resumen diario a las 20:00 Europe/Madrid")
     yield
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
@@ -93,6 +99,7 @@ async def webhook_handler(request: Request):
             await guardar_mensaje(msg.telefono, "assistant", respuesta)
 
             await proveedor.enviar_mensaje(msg.telefono, respuesta)
+            await procesar_posible_lead(msg.telefono, msg.texto)
 
             logger.info(f"[{origen}] Respuesta a {msg.telefono}: {respuesta}")
 

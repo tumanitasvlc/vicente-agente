@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from agent.brain import generar_respuesta
 from agent.memory import inicializar_db, guardar_mensaje, obtener_historial
 from agent.providers import proveedor_meta, proveedor_twilio
-from agent.leads import procesar_posible_lead
+from agent.leads import procesar_posible_lead, procesar_mensaje_zona
 from agent.scheduler import crear_scheduler
 
 load_dotenv()
@@ -100,6 +100,7 @@ async def webhook_handler(request: Request):
 
             await proveedor.enviar_mensaje(msg.telefono, respuesta)
             await procesar_posible_lead(msg.telefono, msg.texto)
+            await procesar_mensaje_zona(msg.telefono, msg.texto)
 
             logger.info(f"[{origen}] Respuesta a {msg.telefono}: {respuesta}")
 

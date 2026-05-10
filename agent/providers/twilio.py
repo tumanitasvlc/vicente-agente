@@ -53,10 +53,10 @@ class ProveedorTwilio(ProveedorWhatsApp):
                 r = await client.post(url, data=data, headers=headers)
             if r.status_code != 201:
                 logger.error(f"Error Twilio: {r.status_code} — {r.text}")
-                await alertar_fallo_envio(telefono, r.status_code, r.text)
+                await alertar_fallo_envio(telefono, r.status_code, r.text, mensaje)
             return r.status_code == 201
         except Exception as exc:
             detalle = f"{type(exc).__name__}: {exc}"
             logger.error(f"Error de red Twilio para {telefono}: {detalle}")
-            await alertar_fallo_envio(telefono, 0, detalle)
+            await alertar_fallo_envio(telefono, 0, detalle, mensaje)
             return False

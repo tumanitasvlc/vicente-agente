@@ -52,7 +52,12 @@ def _guardar_en_error_log(linea: str):
         logger.error(f"[ALERTA] No se pudo escribir en {ERROR_LOG}:\n{traceback.format_exc()}")
 
 
-async def alertar_fallo_envio(telefono: str, status_code: int, detalle: str):
+async def alertar_fallo_envio(
+    telefono: str,
+    status_code: int,
+    detalle: str,
+    mensaje_intentado: str = "",
+):
     """
     Alerta cuando Vicente no puede enviar un mensaje a un cliente.
     Intenta email (Gmail SMTP); si falla, escribe en agent/errors.log.
@@ -64,19 +69,51 @@ async def alertar_fallo_envio(telefono: str, status_code: int, detalle: str):
     ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     tipo = "Rate limit (429)" if status_code == 429 else f"Error HTTP {status_code}"
 
-    asunto = f"[Vicente] Fallo de envío — {tipo} — {telefono}"
+    asunto = f"⚠️ Vicente no puede responder - {tipo}"
     cuerpo = (
-        f"Vicente no pudo responder a un cliente.\n\n"
-        f"Fecha/hora : {ahora}\n"
-        f"Teléfono   : {telefono}\n"
-        f"Código HTTP: {status_code}\n"
-        f"Tipo       : {tipo}\n"
-        f"Detalle    : {detalle}\n\n"
+        f"Vicente no pudo enviar un mensaje a un cliente.\n"
+        f"{'=' * 50}\n\n"
+        f"Timestamp       : {ahora}\n"
+        f"Teléfono cliente: {telefono}\n"
+        f"Código HTTP     : {status_code}\n"
+        f"Tipo de error   : {tipo}\n"
+        f"Error exacto    : {detalle}\n"
+    )
+    if mensaje_intentado:
+        cuerpo += f"\nMensaje que Vicente intentaba enviar:\n{mensaje_intentado}\n"
+    cuerpo += (
+        f"\n{'─' * 50}\n"
         f"Revisa la conversación y responde manualmente si es necesario.\n"
-        f"Panel Twilio: https://console.twilio.com"
+        f"Panel Twilio: https://console.twilio.com\n"
     )
 
     linea_log = f"{ahora} | {tipo} | telefono={telefono} | {detalle[:300]}"
+
+    email_ok = await asyncio.to_thread(_enviar_email_sync, asunto, cuerpo)
+    if not email_ok:
+        _guardar_en_error_log(linea_log)
+
+
+async def alertar_silencio(horas: int):
+    """
+    Alerta cuando el webhook lleva X horas sin recibir mensajes entrantes.
+    Puede indicar que el webhook está caído o que Twilio dejó de redirigir.
+    """
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    asunto = "⚠️ Vicente sin mensajes - posible webhook caído"
+    cuerpo = (
+        f"Vicente no ha recibido ningún mensaje en las últimas {horas} horas.\n"
+        f"{'=' * 50}\n\n"
+        f"Timestamp de la comprobación: {ahora}\n\n"
+        f"Esto puede indicar que el webhook de WhatsApp está caído.\n\n"
+        f"Acciones recomendadas:\n"
+        f"  1. Comprueba que el servidor en Railway está activo\n"
+        f"  2. Verifica la URL del webhook en el panel de Twilio\n"
+        f"  3. Envía un mensaje de prueba al número de WhatsApp\n\n"
+        f"Panel Twilio   : https://console.twilio.com\n"
+        f"Panel Railway  : https://railway.app\n"
+    )
+    linea_log = f"{ahora} | Silencio {horas}h | Sin mensajes entrantes"
 
     email_ok = await asyncio.to_thread(_enviar_email_sync, asunto, cuerpo)
     if not email_ok:

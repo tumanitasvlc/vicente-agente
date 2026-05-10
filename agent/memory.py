@@ -120,6 +120,18 @@ async def stats_hoy() -> dict:
     return {"conversaciones": conversaciones, "leads": leads}
 
 
+async def ultimo_mensaje_recibido() -> datetime | None:
+    """Devuelve el timestamp UTC del último mensaje entrante (role=user)."""
+    async with async_session() as session:
+        query = (
+            select(Mensaje.timestamp)
+            .where(Mensaje.role == "user")
+            .order_by(Mensaje.timestamp.desc())
+            .limit(1)
+        )
+        return (await session.execute(query)).scalar()
+
+
 async def limpiar_historial(telefono: str):
     """Borra todo el historial de una conversación."""
     async with async_session() as session:

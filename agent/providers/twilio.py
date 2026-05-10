@@ -47,8 +47,16 @@ class ProveedorTwilio(ProveedorWhatsApp):
             "To": f"whatsapp:{telefono}",
             "Body": mensaje,
         }
-        async with httpx.AsyncClient() as client:
-            r = await client.post(url, data=data, headers=headers)
+        from agent.alertas import alertar_fallo_envio
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                r = await client.post(url, data=data, headers=headers)
             if r.status_code != 201:
                 logger.error(f"Error Twilio: {r.status_code} — {r.text}")
+                await alertar_fallo_envio(telefono, r.status_code, r.text)
             return r.status_code == 201
+        except Exception as exc:
+            detalle = f"{type(exc).__name__}: {exc}"
+            logger.error(f"Error de red Twilio para {telefono}: {detalle}")
+            await alertar_fallo_envio(telefono, 0, detalle)
+            return False

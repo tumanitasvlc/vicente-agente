@@ -46,18 +46,28 @@ async def notificar_lead(telefono_cliente: str, ultimo_mensaje: str) -> bool:
 
 def _registrar_en_sheets_sync(telefono: str, mensaje: str):
     """Añade una fila al Google Sheet configurado. Bloqueante — llamar con asyncio.to_thread."""
-    sheets_id = os.getenv("GOOGLE_SHEETS_ID")
-    creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "config/google_credentials.json")
-
-    if not sheets_id or not os.path.exists(creds_path):
-        logger.debug("Google Sheets no configurado — saltando registro")
-        return
-
+    import json
     import gspread
     from google.oauth2.service_account import Credentials
 
+    sheets_id = os.getenv("GOOGLE_SHEETS_ID")
+    if not sheets_id:
+        logger.debug("Google Sheets no configurado — saltando registro")
+        return
+
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+
+    creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "config/google_credentials.json")
+    creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+
+    if os.path.exists(creds_path):
+        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+    elif creds_json:
+        creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=scopes)
+    else:
+        logger.debug("Google Sheets no configurado — saltando registro")
+        return
+
     gc = gspread.authorize(creds)
     ws = gc.open_by_key(sheets_id).sheet1
 

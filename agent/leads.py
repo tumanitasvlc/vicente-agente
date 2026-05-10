@@ -47,39 +47,63 @@ async def notificar_lead(telefono_cliente: str, ultimo_mensaje: str) -> bool:
 def _registrar_en_sheets_sync(telefono: str, mensaje: str):
     """Añade una fila al Google Sheet configurado. Bloqueante — llamar con asyncio.to_thread."""
     import json
+    import traceback
     import gspread
     from google.oauth2.service_account import Credentials
 
     sheets_id = os.getenv("GOOGLE_SHEETS_ID")
     if not sheets_id:
-        logger.debug("Google Sheets no configurado — saltando registro")
+        logger.warning("[SHEETS] GOOGLE_SHEETS_ID no configurado — saltando registro")
         return
+
+    logger.debug(f"[SHEETS] Iniciando registro para {telefono}, sheet_id={sheets_id}")
 
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 
     creds_path = os.getenv("GOOGLE_CREDENTIALS_PATH", "config/google_credentials.json")
     creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
 
+    creds = None
     if os.path.exists(creds_path):
-        creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        logger.debug(f"[SHEETS] Cargando credenciales desde archivo: {creds_path}")
+        try:
+            creds = Credentials.from_service_account_file(creds_path, scopes=scopes)
+        except Exception:
+            logger.error(f"[SHEETS] Error al leer credenciales desde archivo {creds_path}:\n{traceback.format_exc()}")
+            return
     elif creds_json:
-        creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=scopes)
+        logger.debug("[SHEETS] Cargando credenciales desde variable de entorno GOOGLE_CREDENTIALS_JSON")
+        try:
+            creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=scopes)
+        except json.JSONDecodeError:
+            logger.error(f"[SHEETS] GOOGLE_CREDENTIALS_JSON no es JSON válido:\n{traceback.format_exc()}")
+            return
+        except Exception:
+            logger.error(f"[SHEETS] Error al parsear credenciales desde variable de entorno:\n{traceback.format_exc()}")
+            return
     else:
-        logger.debug("Google Sheets no configurado — saltando registro")
+        logger.warning(
+            "[SHEETS] No se encontraron credenciales: "
+            f"archivo '{creds_path}' no existe y GOOGLE_CREDENTIALS_JSON no está definido"
+        )
         return
 
-    gc = gspread.authorize(creds)
-    ws = gc.open_by_key(sheets_id).sheet1
-
-    now = datetime.now()
-    ws.append_row([
-        now.strftime("%Y-%m-%d"),
-        now.strftime("%H:%M"),
-        telefono,
-        mensaje,
-        "Nuevo",
-    ])
-    logger.info(f"[LEAD] Registrado en Google Sheets: {telefono}")
+    try:
+        gc = gspread.authorize(creds)
+        ws = gc.open_by_key(sheets_id).sheet1
+        now = datetime.now()
+        ws.append_row([
+            now.strftime("%Y-%m-%d"),
+            now.strftime("%H:%M"),
+            telefono,
+            mensaje,
+            "Nuevo",
+        ])
+        logger.info(f"[SHEETS] Fila añadida correctamente para {telefono}")
+    except gspread.exceptions.APIError as e:
+        logger.error(f"[SHEETS] Error de API de Google Sheets (status={e.response.status_code}):\n{traceback.format_exc()}")
+    except Exception:
+        logger.error(f"[SHEETS] Error inesperado al escribir en Sheets:\n{traceback.format_exc()}")
 
 
 async def registrar_lead_sheets(telefono: str, mensaje: str):

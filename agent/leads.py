@@ -91,11 +91,19 @@ def _registrar_en_sheets_sync(telefono: str, mensaje: str):
     try:
         gc = gspread.authorize(creds)
         ws = gc.open_by_key(sheets_id).sheet1
+
+        # Añadir cabeceras solo si la hoja está vacía
+        if ws.row_count == 0 or not ws.get_all_values():
+            ws.append_row(["Fecha", "Hora", "Teléfono", "Servicio", "Zona", "Mensaje", "Estado"])
+            logger.info("[SHEETS] Cabeceras añadidas")
+
         now = datetime.now()
         ws.append_row([
             now.strftime("%Y-%m-%d"),
             now.strftime("%H:%M"),
             telefono,
+            "",        # Servicio — Vicente lo recopila en conversación (mejora futura)
+            "",        # Zona — Vicente lo recopila en conversación (mejora futura)
             mensaje,
             "Nuevo",
         ])

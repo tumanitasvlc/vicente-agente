@@ -99,7 +99,7 @@ async def webhook_handler(request: Request):
             await guardar_mensaje(msg.telefono, "assistant", respuesta)
 
             await proveedor.enviar_mensaje(msg.telefono, respuesta)
-            await procesar_posible_lead(msg.telefono, msg.texto)
+            await procesar_posible_lead(msg.telefono, msg.texto, historial)
             await procesar_mensaje_zona(msg.telefono, msg.texto)
 
             logger.info(f"[{origen}] Respuesta a {msg.telefono}: {respuesta}")

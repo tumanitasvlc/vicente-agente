@@ -115,9 +115,9 @@ _SERVICIOS: dict[str, list[str]] = {
     ],
 }
 
-# ─── Zonas de Valencia (barrios y municipios habituales) ─────────────────────
+# ─── Zonas de Valencia — cobertura completa (~30 km) ─────────────────────────
 _ZONAS: list[str] = [
-    # Barrios de la ciudad
+    # Barrios de la ciudad de Valencia
     "Ruzafa", "Russafa", "Benimaclet", "El Carmen", "Cabanyal", "Malvarrosa",
     "Patraix", "Jesús", "Campanar", "Benicalap", "Nou Moles", "Torrefiel",
     "Algirós", "Algiros", "Poblats Marítims", "Quatre Carreres", "Extramurs",
@@ -125,14 +125,26 @@ _ZONAS: list[str] = [
     "El Pla del Real", "Olivereta", "Mestalla", "La Creu Coberta", "Sant Marcel·lí",
     "Benimamet", "Benimàmet", "Marxalenes", "El Grao", "Natzaret",
     "La Torre", "Castellar-Oliveral", "Pinedo", "Borbotó",
-    # Municipios del área metropolitana
-    "Paterna", "Mislata", "Burjassot", "Manises", "Quart de Poblet",
-    "Torrent", "Catarroja", "Paiporta", "Xirivella", "Alaquàs", "Alaquas",
-    "Aldaia", "Alboraia", "Alboraya", "Alfafar", "Massalfassar",
-    "Picanya", "Picassent", "Sedaví", "Sedavi", "Benetússer", "Benetusser",
-    "Llocnou de la Corona", "Foios", "Meliana", "Vinalesa", "Tavernes Blanques",
-    "Bonrepòs i Mirambell", "Puig", "El Puig", "Puçol", "Pucol",
-    "Sagunto", "Sagunt", "Gandía", "Gandia",
+    # Norte
+    "Puçol", "Pucol", "El Puig", "El Puig de Santa Maria",
+    "Sagunt", "Sagunto", "Puerto de Sagunto",
+    "Massamagrell", "Museros", "Albalat dels Sorells",
+    "Foios", "Alboraia", "Alboraya",
+    # Noroeste
+    "Bétera", "Betera", "La Eliana", "Serra", "Náquera", "Naquera",
+    "Marines", "Olocau", "Gátova", "Gatova",
+    "Llíria", "Liria", "Benissanó", "Benisano",
+    "Riba-roja de Túria", "Riba-roja de Turia", "Riba-roja",
+    "Paterna", "Burjassot", "Godella", "Rocafort", "Moncada",
+    "Alfara del Patriarca", "Vinalesa", "Massalfassar",
+    # Oeste
+    "Manises", "Quart de Poblet", "Aldaia", "Alaquàs", "Alaquas",
+    "Xirivella", "Mislata",
+    # Sur
+    "Torrent", "Picanya", "Paiporta", "Sedaví", "Sedavi",
+    "Massanassa", "Catarroja", "Alfafar", "Benetússer", "Benetusser",
+    "Alcàsser", "Alcasser", "Picassent", "Silla", "Albal", "Beniparrell",
+    "Lloc Nou de la Corona", "Llocnou de la Corona",
 ]
 # Las más largas primero para que coincidencias compuestas tengan prioridad
 _ZONAS_SORTED = sorted(_ZONAS, key=len, reverse=True)
@@ -222,7 +234,7 @@ def _abrir_hoja_sync() -> gspread.Worksheet | None:
         return None
 
 
-def _registrar_en_sheets_sync(telefono: str, mensaje: str, servicio: str = ""):
+def _registrar_en_sheets_sync(telefono: str, mensaje: str, servicio: str = "", zona: str = ""):
     """Añade una fila de lead al Google Sheet. Bloqueante — llamar con asyncio.to_thread."""
     ws = _abrir_hoja_sync()
     if ws is None:
@@ -239,11 +251,11 @@ def _registrar_en_sheets_sync(telefono: str, mensaje: str, servicio: str = ""):
             now.strftime("%H:%M"),
             telefono,
             servicio,
-            "",        # Zona — se actualiza cuando el cliente la menciona
+            zona,
             mensaje,
             "Nuevo",
         ])
-        logger.info(f"[SHEETS] Fila añadida para {telefono} | servicio={servicio or '—'}")
+        logger.info(f"[SHEETS] Fila añadida para {telefono} | servicio={servicio or '—'} | zona={zona or '—'}")
     except gspread.exceptions.APIError as e:
         logger.error(f"[SHEETS] Error de API (status={e.response.status_code}):\n{traceback.format_exc()}")
     except Exception:
@@ -278,10 +290,10 @@ def _actualizar_zona_sheets_sync(telefono: str, zona: str):
 
 # ─── Wrappers async ───────────────────────────────────────────────────────────
 
-async def registrar_lead_sheets(telefono: str, mensaje: str, servicio: str = ""):
+async def registrar_lead_sheets(telefono: str, mensaje: str, servicio: str = "", zona: str = ""):
     """Wrapper async para el registro de lead en Google Sheets."""
     try:
-        await asyncio.to_thread(_registrar_en_sheets_sync, telefono, mensaje, servicio)
+        await asyncio.to_thread(_registrar_en_sheets_sync, telefono, mensaje, servicio, zona)
     except Exception as e:
         logger.error(f"Error Google Sheets: {e}")
 
@@ -313,10 +325,15 @@ async def notificar_lead(telefono_cliente: str, ultimo_mensaje: str) -> bool:
 
 # ─── Puntos de entrada ────────────────────────────────────────────────────────
 
-async def procesar_posible_lead(telefono_cliente: str, mensaje: str):
+async def procesar_posible_lead(
+    telefono_cliente: str,
+    mensaje: str,
+    historial: list[dict] | None = None,
+):
     """
     Detecta si el mensaje contiene un número de teléfono.
-    Si lo encuentra, extrae el servicio y registra el lead (DB + notificación + Sheets).
+    Si lo encuentra, extrae servicio y zona (del mensaje actual y del historial previo)
+    y registra el lead (DB + notificación + Sheets).
     """
     if not detectar_telefono(mensaje):
         return
@@ -324,15 +341,27 @@ async def procesar_posible_lead(telefono_cliente: str, mensaje: str):
     logger.info(f"[LEAD] Teléfono detectado en mensaje de {telefono_cliente}")
 
     servicio = detectar_servicio(mensaje)
+
+    # Buscar zona en el mensaje actual; si no hay, escanear historial hacia atrás
+    zona = detectar_zona(mensaje)
+    if not zona and historial:
+        for msg in reversed(historial):
+            zona = detectar_zona(msg["content"])
+            if zona:
+                logger.info(f"[LEAD] Zona rescatada del historial: {zona}")
+                break
+
     if servicio:
         logger.info(f"[LEAD] Servicio detectado: {servicio}")
+    if zona:
+        logger.info(f"[LEAD] Zona detectada: {zona}")
 
     from agent.memory import guardar_lead
 
     await asyncio.gather(
         guardar_lead(telefono_cliente, mensaje),
         notificar_lead(telefono_cliente, mensaje),
-        registrar_lead_sheets(telefono_cliente, mensaje, servicio),
+        registrar_lead_sheets(telefono_cliente, mensaje, servicio, zona or ""),
     )
 
 

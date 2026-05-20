@@ -8,8 +8,6 @@ from agent.providers.base import ProveedorWhatsApp, MensajeEntrante
 
 logger = logging.getLogger("agentkit")
 
-META_VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN", "manitas_vlc_2024")
-
 
 class ProveedorMeta(ProveedorWhatsApp):
     """Proveedor de WhatsApp usando la API oficial de Meta (Cloud API)."""
@@ -21,10 +19,12 @@ class ProveedorMeta(ProveedorWhatsApp):
 
     async def validar_webhook(self, request: Request) -> int | None:
         """Responde al challenge de verificación GET que envía Meta."""
+        verify_token = os.getenv("WEBHOOK_VERIFY_TOKEN") or os.getenv("META_VERIFY_TOKEN", "")
         params = request.query_params
         if (
             params.get("hub.mode") == "subscribe"
-            and params.get("hub.verify_token") == META_VERIFY_TOKEN
+            and verify_token
+            and params.get("hub.verify_token") == verify_token
         ):
             challenge = params.get("hub.challenge", "")
             logger.info("Verificación de webhook Meta aceptada")

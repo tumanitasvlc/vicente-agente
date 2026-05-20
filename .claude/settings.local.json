@@ -18,7 +18,18 @@
       "Write",
       "Edit",
       "Glob",
-      "Grep"
+      "Grep",
+      "Bash(brew list *)",
+      "Bash(pyenv versions *)",
+      "Bash(python3.11 *)",
+      "Bash(gh auth *)",
+      "Bash(curl -sL https://api.github.com/repos/cli/cli/releases/latest)",
+      "Bash(curl -sL https://github.com/cli/cli/releases/download/v2.92.0/gh_2.92.0_macOS_arm64.zip -o /tmp/gh.zip)",
+      "Bash(unzip -q /tmp/gh.zip -d /tmp/gh_cli)",
+      "Bash(cp /tmp/gh_cli/gh_2.92.0_macOS_arm64/bin/gh /usr/local/bin/gh)",
+      "Bash(gh --version)",
+      "Bash(~/bin/gh repo *)",
+      "Bash(~/bin/gh auth *)"
     ]
   }
 }
